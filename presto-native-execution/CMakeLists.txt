@@ -76,6 +76,10 @@ if(PRESTO_ENABLE_CUDF)
   set(VELOX_ENABLE_CUDF
       ON
       CACHE BOOL "Build cuDF support")
+  add_compile_definitions(PRESTO_ENABLE_CUDF)
+  enable_language(CUDA)
+  # Determine CUDA_ARCHITECTURES automatically.
+  cmake_policy(SET CMP0104 NEW)
 endif()
 
 if(PRESTO_ENABLE_S3)

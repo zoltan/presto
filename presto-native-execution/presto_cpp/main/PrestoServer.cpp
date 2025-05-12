@@ -67,6 +67,10 @@
 #include "velox/serializers/PrestoSerializer.h"
 #include "velox/serializers/UnsafeRowSerializer.h"
 
+#ifdef PRESTO_ENABLE_CUDF
+#include "velox/experimental/cudf/exec/ToCudf.h"
+#endif
+
 #ifdef PRESTO_ENABLE_REMOTE_FUNCTIONS
 #include "presto_cpp/main/RemoteFunctionRegisterer.h"
 #endif
@@ -141,6 +145,12 @@ bool cachePeriodicPersistenceEnabled() {
       systemConfig->asyncCacheSsdGb() > 0 &&
       systemConfig->asyncCachePersistenceInterval() >
       std::chrono::seconds::zero();
+}
+
+void registerVeloxCudf() {
+#ifdef PRESTO_ENABLE_CUDF
+ facebook::velox::cudf_velox::registerCudf();
+#endif
 }
 
 } // namespace
@@ -367,6 +377,7 @@ void PrestoServer::run() {
           });
     }
   }
+  registerVeloxCudf();
   registerFunctions();
   registerRemoteFunctions();
   registerVectorSerdes();
