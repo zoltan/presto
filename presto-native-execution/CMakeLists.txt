@@ -44,6 +44,9 @@ set(CMAKE_CXX_FLAGS
 # Forwards user input to VELOX_ENABLE_S3.
 option(PRESTO_ENABLE_S3 "Build S3 support" OFF)
 
+# Forwards user input to VELOX_ENABLE_CUDF
+option(PRESTO_ENABLE_CUDF "Build cuDF support" OFF)
+
 # Forwards user input to VELOX_ENABLE_HDFS.
 option(PRESTO_ENABLE_HDFS "Build HDFS support" OFF)
 
@@ -67,6 +70,13 @@ option(PRESTO_ENABLE_ARROW_FLIGHT_CONNECTOR "Enable Arrow Flight connector" OFF)
 
 # Set all Velox options below
 add_compile_definitions(FOLLY_HAVE_INT128_T=1)
+
+if(PRESTO_ENABLE_CUDF)
+  set(CMAKE_CUDA_ARCHITECTURES "80")
+  set(VELOX_ENABLE_CUDF
+      ON
+      CACHE BOOL "Build cuDF support")
+endif()
 
 if(PRESTO_ENABLE_S3)
   set(VELOX_ENABLE_S3
