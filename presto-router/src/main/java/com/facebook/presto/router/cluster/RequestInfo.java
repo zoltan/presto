@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.router.cluster;
 
+import com.facebook.presto.spi.router.RouterRequestInfo;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 
@@ -35,12 +36,16 @@ public class RequestInfo
     private final String user;
     private final Optional<String> source;
     private final List<String> clientTags;
+    private final String query;
+    private final HttpServletRequest servletRequest;
 
     public RequestInfo(HttpServletRequest servletRequest, String query)
     {
+        this.servletRequest = requireNonNull(servletRequest, "servletRequest is null");
         this.user = parseHeader(servletRequest, PRESTO_USER);
         this.source = Optional.ofNullable(parseHeader(servletRequest, PRESTO_SOURCE));
         this.clientTags = requireNonNull(parseClientTags(servletRequest), "clientTags is null");
+        this.query = query;
     }
 
     public String getUser()
@@ -53,9 +58,19 @@ public class RequestInfo
         return source;
     }
 
+    public String getQuery()
+    {
+        return query;
+    }
+
     public List<String> getClientTags()
     {
         return clientTags;
+    }
+
+    public RouterRequestInfo toRouterRequestInfo()
+    {
+        return new RouterRequestInfo(user, source, clientTags, query, servletRequest);
     }
 
     private static List<String> parseClientTags(HttpServletRequest servletRequest)

@@ -31,6 +31,7 @@ import com.facebook.presto.hive.MetastoreClientConfig;
 import com.facebook.presto.hive.authentication.NoHdfsAuthentication;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.iceberg.CatalogType;
+import com.facebook.presto.iceberg.IcebergCatalogName;
 import com.facebook.presto.iceberg.IcebergColumnHandle;
 import com.facebook.presto.iceberg.IcebergHiveTableOperationsConfig;
 import com.facebook.presto.iceberg.IcebergMetadataColumn;
@@ -261,6 +262,7 @@ public class TestIcebergHiveStatistics
         // partitioned table should have stats partially filtered since data should span > 1 file
         assertTrue(statsWithPartition.getRowCount().getValue() < statsNoPartition.getRowCount().getValue());
 
+        getQueryRunner().getTransactionManager().asyncAbort(txid);
         assertQuerySucceeds("DROP TABLE statsNoPartitionAnalyze");
         assertQuerySucceeds("DROP TABLE statsWithPartitionAnalyze");
     }
@@ -325,6 +327,8 @@ public class TestIcebergHiveStatistics
         assertNotNull(statsNoPartition.getColumnStatistics().get(noPartColumns.get("orderkey")));
         // partitioned table should have stats partially filtered since data should span > 1 file
         assertTrue(statsWithPartition.getRowCount().getValue() < statsNoPartition.getRowCount().getValue());
+
+        getQueryRunner().getTransactionManager().asyncAbort(txid);
         assertQuerySucceeds("DROP TABLE statsNoPartition");
         assertQuerySucceeds("DROP TABLE statsWithPartition");
     }
@@ -485,7 +489,10 @@ public class TestIcebergHiveStatistics
         Session txnSession = session.beginTransactionId(txid, queryRunner.getTransactionManager(), new AllowAllAccessControl());
         Map<String, ColumnHandle> columnHandles = getColumnHandles(queryRunner, table, txnSession);
         List<ColumnHandle> columnHandleList = new ArrayList<>(columnHandles.values());
-        return meta.getTableStatistics(txnSession, getAnalyzeTableHandle(queryRunner, table, txnSession), columnHandleList, Constraint.alwaysTrue());
+        TableStatistics tableStatistics = meta.getTableStatistics(txnSession, getAnalyzeTableHandle(queryRunner, table, txnSession), columnHandleList, Constraint.alwaysTrue());
+
+        queryRunner.getTransactionManager().asyncAbort(txid);
+        return tableStatistics;
     }
 
     private TableStatistics getTableStatistics(Session session, String table)
@@ -586,6 +593,7 @@ public class TestIcebergHiveStatistics
 
     private Table loadTable(String tableName)
     {
+        tableName = normalizeIdentifier(tableName, ICEBERG_CATALOG);
         CatalogManager catalogManager = getDistributedQueryRunner().getCoordinator().getCatalogManager();
         ConnectorId connectorId = catalogManager.getCatalog(ICEBERG_CATALOG).get().getConnectorId();
 
@@ -594,6 +602,7 @@ public class TestIcebergHiveStatistics
                 new IcebergHiveTableOperationsConfig(),
                 new ManifestFileCache(CacheBuilder.newBuilder().build(), false, 0, 1024),
                 getQueryRunner().getDefaultSession().toConnectorSession(connectorId),
+                new IcebergCatalogName(ICEBERG_CATALOG),
                 SchemaTableName.valueOf("tpch." + tableName));
     }
 

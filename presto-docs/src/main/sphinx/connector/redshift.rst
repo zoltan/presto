@@ -19,7 +19,7 @@ connection properties as appropriate for your setup:
 .. code-block:: none
 
     connector.name=redshift
-    connection-url=jdbc:postgresql://example.net:5439/database
+    connection-url=jdbc:redshift://example.net:5439/database
     connection-user=root
     connection-password=secret
 
@@ -54,6 +54,8 @@ Property Name                                      Description                  
 
 ``case-insensitive-name-matching.cache-ttl``       Duration for which remote dataset and table names will be
                                                    cached. Set to ``0ms`` to disable the cache.                         ``1m``
+
+``list-schemas-ignored-schemas``                   List of schemas to ignore when listing schemas.                      ``information_schema``
 ================================================== ==================================================================== ===========
 
 Querying Redshift

@@ -19,7 +19,6 @@ export CC=/opt/rh/gcc-toolset-12/root/bin/gcc
 export CXX=/opt/rh/gcc-toolset-12/root/bin/g++
 
 WGET_OPTIONS=${WGET_OPTIONS:-""}
-TAR_OPTIONS=${TAR_OPTIONS:-"-v"}
 
 CPU_TARGET="${CPU_TARGET:-avx}"
 SCRIPT_DIR=$(readlink -f "$(dirname "${BASH_SOURCE[0]}")")
@@ -38,7 +37,7 @@ function install_presto_deps_from_package_managers {
 
 function install_gperf {
   wget ${WGET_OPTIONS} http://ftp.gnu.org/pub/gnu/gperf/gperf-3.1.tar.gz &&
-  tar ${TAR_OPTIONS} -xzf gperf-3.1.tar.gz &&
+  tar -xzf gperf-3.1.tar.gz &&
   cd gperf-3.1 &&
   ./configure --prefix=/usr/local/gperf/3_1 &&
   make "-j$(nproc)" &&
@@ -51,9 +50,12 @@ function install_gperf {
 }
 
 function install_proxygen {
-  git clone https://github.com/facebook/proxygen &&
-  cd proxygen &&
-  git checkout $FB_OS_VERSION &&
+  git clone https://github.com/facebook/proxygen
+  cd proxygen
+  git checkout $FB_OS_VERSION
+  # Folly Portability.h being used to decide whether or not support coroutines
+  # causes issues (build, lin) if the selection is not consistent across users of folly.
+  EXTRA_PKG_CXXFLAGS=" -DFOLLY_CFG_NO_COROUTINES"
   cmake_install -DBUILD_TESTS=OFF -DBUILD_SHARED_LIBS=ON
 }
 

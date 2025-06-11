@@ -66,9 +66,25 @@ def main():
     comment = "// This file is generated DO NOT EDIT @" + "generated"
     result = [{"comment": comment}]
 
+    thrift = [item for item in thrift if "class_name" in item and item.class_name not in config.SkipStruct]
     for thrift_item in thrift:
+        if "class_name" not in thrift_item:
+            continue
+
+        if thrift_item.class_name in config.WrapperStruct:
+            thrift_item["wrapper"] = "true"
+            del thrift_item["struct"]
+            continue
+
         config_item = None
-        if "class_name" in thrift_item and thrift_item.class_name in pmap:
+        if thrift_item.class_name in config.Special:
+            hfile = "./special/" + thrift_item.class_name + ".hpp.inc"
+            special = special_file(hfile, special, thrift_item, "hinc")
+
+            cfile = "./special/" + thrift_item.class_name + ".cpp.inc"
+            special = special_file(cfile, special, thrift_item, "cinc")
+
+        elif thrift_item.class_name in pmap:
             protocol_item = pmap[thrift_item.class_name]
 
             special = False
@@ -113,20 +129,13 @@ def main():
                             + " "
                             + str(protocol_field_set - thrift_field_set)
                         )
-                else:
-                    hfile = "./special/" + thrift_item.class_name + ".hpp.inc"
-                    special = special_file(hfile, special, thrift_item, "hinc")
-
-                    cfile = "./special/" + thrift_item.class_name + ".cpp.inc"
-                    special = special_file(cfile, special, thrift_item, "cinc")
-
-                    if not special:
-                        eprint(
-                            "Thrift struct missing from presto_protocol: "
-                            + thrift_item.class_name
-                        )
+                elif not special:
+                    eprint(
+                        "Thrift struct missing from presto_protocol: "
+                        + thrift_item.class_name
+                    )
         else:
-            eprint("Thrift item missing from presto_protocol: " + item.class_name)
+            eprint("Thrift item missing from presto_protocol: " + thrift_item.class_name)
 
     result.extend(thrift)
     print(util.to_json(result))

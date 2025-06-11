@@ -17,17 +17,29 @@ import com.facebook.presto.nativeworker.NativeQueryRunnerUtils;
 import com.facebook.presto.nativeworker.PrestoNativeQueryRunnerUtils;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestRepartitionQueries;
-import com.google.common.collect.ImmutableMap;
 import org.testng.annotations.Parameters;
+
+import static com.facebook.presto.sidecar.NativeSidecarPluginQueryRunnerUtils.setupNativeSidecarPlugin;
+import static java.lang.Boolean.parseBoolean;
 
 public class TestRepartitionQueries
         extends AbstractTestRepartitionQueries
 {
-    @Parameters("storageFormat")
+    @Parameters({"storageFormat", "sidecarEnabled"})
     @Override
     protected QueryRunner createQueryRunner() throws Exception
     {
-        return PrestoNativeQueryRunnerUtils.createNativeQueryRunner(ImmutableMap.of(), System.getProperty("storageFormat"));
+        boolean sidecar = parseBoolean(System.getProperty("sidecarEnabled"));
+        QueryRunner queryRunner = PrestoNativeQueryRunnerUtils.nativeHiveQueryRunnerBuilder()
+                .setStorageFormat(System.getProperty("storageFormat"))
+                .setAddStorageFormatToPath(true)
+                .setUseThrift(true)
+                .setCoordinatorSidecarEnabled(sidecar)
+                .build();
+        if (sidecar) {
+            setupNativeSidecarPlugin(queryRunner);
+        }
+        return queryRunner;
     }
 
     @Parameters("storageFormat")
@@ -36,7 +48,10 @@ public class TestRepartitionQueries
     {
         try {
             String storageFormat = System.getProperty("storageFormat");
-            QueryRunner javaQueryRunner = PrestoNativeQueryRunnerUtils.createJavaQueryRunner(storageFormat);
+            QueryRunner javaQueryRunner = PrestoNativeQueryRunnerUtils.javaHiveQueryRunnerBuilder()
+                    .setStorageFormat(storageFormat)
+                    .setAddStorageFormatToPath(true)
+                    .build();
             if (storageFormat.equals("DWRF")) {
                 NativeQueryRunnerUtils.createAllTables(javaQueryRunner, true);
             }

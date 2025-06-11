@@ -16,16 +16,13 @@ package com.facebook.presto.router;
 import com.facebook.airlift.bootstrap.Bootstrap;
 import com.facebook.airlift.http.server.testing.TestingHttpServerModule;
 import com.facebook.airlift.jaxrs.JaxrsModule;
-import com.facebook.airlift.json.JsonCodec;
 import com.facebook.airlift.json.JsonModule;
 import com.facebook.airlift.log.Logging;
 import com.facebook.airlift.node.testing.TestingNodeModule;
 import com.facebook.presto.ClientRequestFilterModule;
 import com.facebook.presto.router.cluster.ClusterManager;
+import com.facebook.presto.router.cluster.RemoteClusterInfo;
 import com.facebook.presto.router.cluster.RequestInfo;
-import com.facebook.presto.router.spec.GroupSpec;
-import com.facebook.presto.router.spec.RouterSpec;
-import com.facebook.presto.router.spec.SelectorRuleSpec;
 import com.facebook.presto.server.MockHttpServletRequest;
 import com.facebook.presto.server.security.ServerSecurityModule;
 import com.facebook.presto.server.testing.TestingPrestoServer;
@@ -42,13 +39,19 @@ import javax.servlet.http.HttpServletRequest;
 
 import java.io.File;
 import java.net.URI;
-import java.nio.file.Files;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
-import static com.facebook.presto.router.scheduler.SchedulerType.ROUND_ROBIN;
-import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.facebook.presto.router.TestingRouterUtil.getConfigFile;
+import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.Thread.sleep;
+import static java.time.Instant.now;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
@@ -62,7 +65,7 @@ public class TestHealthChecks
     public void setup()
             throws Exception
     {
-        File configFile = File.createTempFile("router", ".json");
+        File tempFile = File.createTempFile("router", ".json");
 
         Logging.initialize();
 
@@ -77,16 +80,7 @@ public class TestHealthChecks
         }
 
         prestoServers = builder.build();
-        List<URI> serverURIs = prestoServers.stream()
-                .map(TestingPrestoServer::getBaseUrl)
-                .collect(toImmutableList());
-
-        RouterSpec spec = new RouterSpec(ImmutableList.of(new GroupSpec("group1", serverURIs, Optional.empty(), Optional.empty())),
-                  ImmutableList.of(new SelectorRuleSpec(Optional.empty(), Optional.empty(), Optional.empty(), "group1")),
-                  Optional.of(ROUND_ROBIN),
-                  Optional.empty());
-        JsonCodec<RouterSpec> jsonCodec = JsonCodec.jsonCodec(RouterSpec.class);
-        Files.write(configFile.toPath(), jsonCodec.toBytes(spec));
+        getConfigFile(prestoServers, tempFile);
 
         Bootstrap app = new Bootstrap(
                 new TestingNodeModule("test"),
@@ -94,10 +88,11 @@ public class TestHealthChecks
                 new JaxrsModule(true),
                 new ServerSecurityModule(),
                 new ClientRequestFilterModule(),
-                new RouterModule());
+                new RouterModule(Optional.empty()));
 
         Injector injector = app.doNotInitializeLogging()
-                .setRequiredConfigurationProperty("router.config-file", configFile.getAbsolutePath())
+                .setRequiredConfigurationProperty("router.config-file", tempFile.getAbsolutePath())
+                .setOptionalConfigurationProperty("presto.version", "test")
                 .setOptionalConfigurationProperty("router.remote-state.cluster-unhealthy-timeout", "4s")
                 .setOptionalConfigurationProperty("router.remote-state.polling-interval", "0.5s")
                 .initialize();
@@ -113,9 +108,28 @@ public class TestHealthChecks
         }
     }
 
+    static void waitUntil(Supplier<Boolean> condition, int value, TimeUnit unit)
+            throws TimeoutException, InterruptedException
+    {
+        checkArgument(value > 0, "timeout value must be greater than 0");
+        Instant start = now();
+        long timeoutMillis = unit.toMillis(value);
+        long sleepMillis = Math.min(timeoutMillis / 10, 50);
+        Instant deadline = start.plusMillis(timeoutMillis);
+        while (true) {
+            if (condition.get()) {
+                return;
+            }
+            if (now().isAfter(deadline)) {
+                throw new TimeoutException();
+            }
+            sleep(sleepMillis);
+        }
+    }
+
     @Test
     public void testHealthChecks()
-            throws InterruptedException
+            throws InterruptedException, TimeoutException
     {
         TestingPrestoServer server0 = prestoServers.get(0);
         TestingPrestoServer server1 = prestoServers.get(1);
@@ -127,12 +141,10 @@ public class TestHealthChecks
         assertTrue(healthyDestinations.contains(server2.getBaseUrl()));
 
         server0.stopResponding();
-        while (
-                clusterManager.getRemoteClusterInfos().get(server0.getBaseUrl()).isHealthy()
-                        || !clusterManager.getRemoteClusterInfos().get(server1.getBaseUrl()).isHealthy()
-                        || !clusterManager.getRemoteClusterInfos().get(server2.getBaseUrl()).isHealthy()) {
-            Thread.sleep(10);
-        }
+        waitUntil(() ->
+                !clusterManager.getRemoteClusterInfos().get(server0.getBaseUrl()).isHealthy()
+                        && clusterManager.getRemoteClusterInfos().get(server1.getBaseUrl()).isHealthy()
+                        && clusterManager.getRemoteClusterInfos().get(server2.getBaseUrl()).isHealthy(), 2, MINUTES);
 
         healthyDestinations = getDestinations(3);
         assertFalse(healthyDestinations.contains(server0.getBaseUrl()));
@@ -140,12 +152,11 @@ public class TestHealthChecks
         assertTrue(healthyDestinations.contains(server2.getBaseUrl()));
 
         server0.startResponding();
-        while (
-                !clusterManager.getRemoteClusterInfos().get(server0.getBaseUrl()).isHealthy()
-                        || !clusterManager.getRemoteClusterInfos().get(server1.getBaseUrl()).isHealthy()
-                        || !clusterManager.getRemoteClusterInfos().get(server2.getBaseUrl()).isHealthy()) {
-            Thread.sleep(10);
-        }
+        waitUntil(() -> prestoServers.stream()
+                        .map(TestingPrestoServer::getBaseUrl)
+                        .map(clusterManager.getRemoteClusterInfos()::get)
+                        .allMatch(RemoteClusterInfo::isHealthy),
+                2, MINUTES);
 
         healthyDestinations = getDestinations(3);
         assertTrue(healthyDestinations.contains(server0.getBaseUrl()));

@@ -96,6 +96,12 @@ public abstract class DelegatingMetadataManager
     }
 
     @Override
+    public Map<String, Object> getSchemaProperties(Session session, CatalogSchemaName schemaName)
+    {
+        return delegate.getSchemaProperties(session, schemaName);
+    }
+
+    @Override
     public Optional<SystemTable> getSystemTable(Session session, QualifiedObjectName tableName)
     {
         return delegate.getSystemTable(session, tableName);
@@ -647,5 +653,11 @@ public abstract class DelegatingMetadataManager
     public void addConstraint(Session session, TableHandle tableHandle, TableConstraint<String> tableConstraint)
     {
         delegate.addConstraint(session, tableHandle, tableConstraint);
+    }
+
+    @Override
+    public String normalizeIdentifier(Session session, String catalogName, String identifier)
+    {
+        return delegate.normalizeIdentifier(session, catalogName, identifier);
     }
 }

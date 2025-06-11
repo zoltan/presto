@@ -66,6 +66,12 @@ Property Name                                      Description                  
 
 ``case-insensitive-name-matching.cache-ttl``       Duration for which remote dataset and table names will be
                                                    cached. Set to ``0ms`` to disable the cache.                         ``1m``
+
+``list-schemas-ignored-schemas``                   List of schemas to ignore when listing schemas.                      ``information_schema,mysql``
+
+``case-sensitive-name-matching``                   Enable case sensitive identifier support for schema and table        ``false``
+                                                   names for the connector. When disabled, names are matched
+                                                   case-insensitively using lowercase normalization.
 ================================================== ==================================================================== ===========
 
 Querying MySQL
@@ -166,6 +172,8 @@ The connector maps MySQL types to the corresponding PrestoDB types:
     - ``DATETIME``
   * - ``TIMESTAMP(n)``
     - ``TIMESTAMP``
+  * - ``GEOMETRY``
+    - ``VARCHAR``
 
 No other types are supported.
 

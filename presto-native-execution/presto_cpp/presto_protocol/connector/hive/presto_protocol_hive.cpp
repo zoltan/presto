@@ -791,6 +791,8 @@ namespace facebook::presto::protocol::hive {
 void to_json(json& j, const Table& p) {
   j = json::object();
   to_json_key(
+      j, "catalogName", p.catalogName, "Table", "String", "catalogName");
+  to_json_key(
       j, "databaseName", p.databaseName, "Table", "String", "databaseName");
   to_json_key(j, "tableName", p.tableName, "Table", "String", "tableName");
   to_json_key(j, "owner", p.owner, "Table", "String", "owner");
@@ -831,6 +833,8 @@ void to_json(json& j, const Table& p) {
 
 void from_json(const json& j, Table& p) {
   from_json_key(
+      j, "catalogName", p.catalogName, "Table", "String", "catalogName");
+  from_json_key(
       j, "databaseName", p.databaseName, "Table", "String", "databaseName");
   from_json_key(j, "tableName", p.tableName, "Table", "String", "tableName");
   from_json_key(j, "owner", p.owner, "Table", "String", "owner");
@@ -869,19 +873,6 @@ void from_json(const json& j, Table& p) {
       "viewExpandedText");
 }
 } // namespace facebook::presto::protocol::hive
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 namespace facebook::presto::protocol::hive {
 
 void to_json(json& j, const HivePageSinkMetadata& p) {
@@ -907,19 +898,6 @@ void from_json(const json& j, HivePageSinkMetadata& p) {
   from_json_key(j, "table", p.table, "HivePageSinkMetadata", "Table", "table");
 }
 } // namespace facebook::presto::protocol::hive
-/*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 namespace facebook::presto::protocol::hive {
 
 static const std::pair<HiveStorageFormat, json> HiveStorageFormat_enum_table[] =

@@ -636,6 +636,21 @@ public abstract class IcebergDistributedTestBase
     }
 
     @Test
+    protected void testCreateTableAndValidateIcebergTableName()
+    {
+        String tableName = "test_create_table_for_validate_name";
+        Session session = getSession();
+        assertUpdate(session, format("CREATE TABLE %s (col1 INTEGER, aDate DATE)", tableName));
+        Table icebergTable = loadTable(tableName);
+
+        String catalog = session.getCatalog().get();
+        String schemaName = session.getSchema().get();
+        assertEquals(icebergTable.name(), catalog + "." + schemaName + "." + tableName);
+
+        assertUpdate("DROP TABLE IF EXISTS " + tableName);
+    }
+
+    @Test
     public void testPartitionedByTimeType()
     {
         // create iceberg table partitioned by column of TimestampType, and insert some data
@@ -1076,12 +1091,15 @@ public abstract class IcebergDistributedTestBase
         String tableName = snapshot.map(snap -> format("%s@%d", name, snap)).orElse(name);
         String qualifiedName = format("%s.%s.%s", getSession().getCatalog().get(), getSession().getSchema().get(), tableName);
         TableHandle handle = resolver.getTableHandle(QualifiedObjectName.valueOf(qualifiedName)).get();
-        return metadata.getTableStatistics(metadataSession,
+        TableStatistics tableStatistics = metadata.getTableStatistics(metadataSession,
                 handle,
                 new ArrayList<>(columns
                         .map(columnSet -> Maps.filterKeys(resolver.getColumnHandles(handle), columnSet::contains))
                         .orElseGet(() -> resolver.getColumnHandles(handle)).values()),
                 Constraint.alwaysTrue());
+
+        getQueryRunner().getTransactionManager().asyncAbort(transactionId);
+        return tableStatistics;
     }
 
     private static ColumnStatistics columnStatsFor(TableStatistics statistics, String name)
@@ -2047,8 +2065,10 @@ public abstract class IcebergDistributedTestBase
         assertQuerySucceeds("CREATE TABLE test_statistics_file_cache(i int)");
         assertUpdate("INSERT INTO test_statistics_file_cache VALUES 1, 2, 3, 4, 5", 5);
         assertQuerySucceeds("ANALYZE test_statistics_file_cache");
+
+        TransactionId transactionId = getQueryRunner().getTransactionManager().beginTransaction(false);
         Session session = Session.builder(getSession())
-                .setTransactionId(getQueryRunner().getTransactionManager().beginTransaction(false))
+                .setTransactionId(transactionId)
                 .build();
         Optional<TableHandle> handle = MetadataUtil.getOptionalTableHandle(session,
                 getQueryRunner().getTransactionManager(),
@@ -2068,6 +2088,8 @@ public abstract class IcebergDistributedTestBase
         getTableStats("test_statistics_file_cache", Optional.empty(), getSession(), Optional.of(ImmutableList.of("i")));
         assertEquals(metadata.statisticsFileCache.stats().minus(initial).missCount(), 1);
         assertEquals(metadata.statisticsFileCache.stats().minus(initial).hitCount(), 1);
+
+        getQueryRunner().getTransactionManager().asyncAbort(transactionId);
         getQueryRunner().execute("DROP TABLE test_statistics_file_cache");
     }
 
@@ -2526,7 +2548,8 @@ public abstract class IcebergDistributedTestBase
 
     protected Table loadTable(String tableName)
     {
-        Catalog catalog = CatalogUtil.loadCatalog(catalogType.getCatalogImpl(), "test-hive", getProperties(), new Configuration());
+        tableName = normalizeIdentifier(tableName, ICEBERG_CATALOG);
+        Catalog catalog = CatalogUtil.loadCatalog(catalogType.getCatalogImpl(), ICEBERG_CATALOG, getProperties(), new Configuration());
         return catalog.loadTable(TableIdentifier.of("tpch", tableName));
     }
 
